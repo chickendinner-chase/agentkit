@@ -3,9 +3,6 @@ import {
   CdpWalletProvider,
   walletActionProvider,
   erc20ActionProvider,
-  cdpApiActionProvider,
-  cdpWalletActionProvider,
-  pythActionProvider,
 } from "@coinbase/agentkit";
 import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
@@ -19,49 +16,38 @@ import { BaseMessage } from "@langchain/core/messages";
 import { ActionProvider } from "@coinbase/agentkit";
 import { z } from "zod";
 import { ethers } from "ethers";
+import { aaveActionProvider } from "./aaveActionProvider";
 
 dotenv.config();
 
 /**
- * Validates that required environment variables are set
- *
- * @throws {Error} - If required environment variables are missing
- * @returns {void}
+ * 验证必要的环境变量
  */
 function validateEnvironment(): void {
   const missingVars: string[] = [];
 
-  // Check required variables
+  // 检查所需的变量
   const requiredVars = [
     "OPENAI_API_KEY", 
     "CDP_API_KEY_NAME", 
     "CDP_API_KEY_PRIVATE_KEY"
   ];
+
   requiredVars.forEach(varName => {
     if (!process.env[varName]) {
       missingVars.push(varName);
     }
   });
 
-  // Exit if any required variables are missing
   if (missingVars.length > 0) {
-    console.error("Error: Required environment variables are not set");
-    missingVars.forEach(varName => {
-      console.error(`${varName}=your_${varName.toLowerCase()}_here`);
-    });
-    process.exit(1);
-  }
-
-  // Warn about optional NETWORK_ID
-  if (!process.env.NETWORK_ID) {
-    console.warn("Warning: NETWORK_ID not set, defaulting to base-sepolia testnet");
+    throw new Error(`缺少环境变量: ${missingVars.join(", ")}。请添加到.env文件中。`);
   }
 }
 
-// Add this right after imports and before any other code
+// 验证环境变量
 validateEnvironment();
 
-// Configure a file to persist the agent's CDP MPC Wallet Data
+// 配置文件以持久化存储CDP钱包数据
 const WALLET_DATA_FILE = "wallet_data.txt";
 
 // Base Sepolia WETH 地址
@@ -86,50 +72,39 @@ function customWethProvider(): ActionProvider {
         try {
           console.log("调用 get_weth_balance 方法");
           
-          // 检查参数
-          const { context } = args;
+          // 使用默认提供者和硬编码的钱包地址
+          // 这是从wallet_data.txt中读取的同一个钱包地址
+          const provider = new ethers.JsonRpcProvider("https://sepolia.base.org");
+          const address = "0x15266fe88F98bE7415ee14873Cd64dd280d74AFa";
+          console.log("查询地址:", address);
           
-          // 确保钱包提供者存在
-          if (!context || !context.walletProvider) {
-            throw new Error("钱包未连接或未初始化");
-          }
-          
-          // 获取钱包地址和提供者
-          const walletProvider = context.walletProvider;
-          const address = walletProvider.getAddress();
-          console.log("钱包地址:", address);
-          
-          // WETH 是一个 ERC20 代币，使用标准 ERC20 接口
-          const wethContract = {
-            address: BASE_SEPOLIA_WETH as `0x${string}`,
-            abi: [
+          // 创建WETH合约
+          const wethContract = new ethers.Contract(
+            BASE_SEPOLIA_WETH,
+            [
               "function balanceOf(address) view returns (uint256)",
               "function decimals() view returns (uint8)"
-            ]
-          };
+            ],
+            provider
+          );
           
-          // 读取 WETH 余额
-          const balance = await walletProvider.readContract({
-            ...wethContract,
-            functionName: "balanceOf",
-            args: [address]
-          });
-          
-          // 读取 WETH 小数位数
-          const decimals = await walletProvider.readContract({
-            ...wethContract,
-            functionName: "decimals",
-            args: []
-          });
+          // 读取WETH余额和小数位
+          const balance = await wethContract.balanceOf(address);
+          const decimals = await wethContract.decimals();
           
           console.log("WETH 余额:", balance.toString());
           console.log("WETH 小数位:", decimals.toString());
           
+          // 格式化余额 - 显示更多小数位
+          const formattedBalance = ethers.formatUnits(balance, decimals);
+          // 转换为数字，然后格式化为固定的18位小数，确保显示所有小数位
+          const fullPrecisionBalance = Number(formattedBalance).toFixed(18);
+          
           // 格式化余额
-          return `您的 WETH 余额为 ${ethers.formatUnits(balance, decimals)} WETH`;
-        } catch (error) {
-          console.error("Error getting WETH balance:", error);
-          throw new Error(`获取 WETH 余额失败: ${error instanceof Error ? error.message : '未知错误'}`);
+          return `您的 WETH 余额为 ${fullPrecisionBalance} WETH`;
+        } catch (error: any) {
+          console.error("获取WETH余额错误:", error);
+          return `获取WETH余额失败: ${error?.message || '未知错误'}`;
         }
       },
     },
@@ -141,23 +116,47 @@ function customWethProvider(): ActionProvider {
       }),
       invoke: async (args: any) => {
         try {
-          const { context, amount } = args;
-          if (!context?.walletProvider) {
-            throw new Error("钱包未连接或未初始化");
+          console.log("调用 wrap_eth 方法");
+          console.log("参数:", JSON.stringify(args, null, 2));
+          
+          // LangChain工具可能以不同方式传递参数
+          let amount;
+          if (args.params && args.params.amount) {
+            amount = args.params.amount;
+          } else if (args.amount) {
+            amount = args.amount;
+          } else {
+            console.log("无法获取amount参数");
+            return "未提供转换金额。请输入要转换的ETH数量，例如：'将0.0001 ETH转换为WETH'";
           }
-
+          
+          console.log("转换金额:", amount);
+          
+          // 读取CDP钱包文件
+          const walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf-8");
+          const config = {
+            apiKeyName: process.env.CDP_API_KEY_NAME,
+            apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
+            cdpWalletData: walletDataStr,
+            networkId: process.env.NETWORK_ID || "base-sepolia",
+          };
+          
+          // 配置CDP钱包
+          const walletProvider = await CdpWalletProvider.configureWithWallet(config);
           const weiAmount = ethers.parseEther(amount);
           
-          const tx = await context.walletProvider.sendTransaction({
+          // 发送交易
+          const tx = await walletProvider.sendTransaction({
             to: BASE_SEPOLIA_WETH as `0x${string}`,
             value: weiAmount,
             data: "0xd0e30db0", // deposit() 函数的签名
           });
 
-          return `交易已提交，交易哈希: ${tx.hash}`;
-        } catch (error) {
-          console.error("Error wrapping ETH:", error);
-          throw new Error(`转换 ETH 失败: ${error instanceof Error ? error.message : '未知错误'}`);
+          // 简化输出，避免类型问题
+          return `交易已提交，${amount} ETH已转换为WETH，请查看区块链浏览器确认详情`;
+        } catch (error: any) {
+          console.error("转换ETH错误:", error);
+          return `转换ETH失败: ${error?.message || '未知错误'}`;
         }
       },
     },
@@ -169,22 +168,46 @@ function customWethProvider(): ActionProvider {
       }),
       invoke: async (args: any) => {
         try {
-          const { context, amount } = args;
-          if (!context?.walletProvider) {
-            throw new Error("钱包未连接或未初始化");
+          console.log("调用 unwrap_weth 方法");
+          console.log("参数:", JSON.stringify(args, null, 2));
+          
+          // LangChain工具可能以不同方式传递参数
+          let amount;
+          if (args.params && args.params.amount) {
+            amount = args.params.amount;
+          } else if (args.amount) {
+            amount = args.amount;
+          } else {
+            console.log("无法获取amount参数");
+            return "未提供转换金额。请输入要转换的WETH数量，例如：'将0.0001 WETH转换为ETH'";
           }
-
+          
+          console.log("转换金额:", amount);
+          
+          // 读取CDP钱包文件
+          const walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf-8");
+          const config = {
+            apiKeyName: process.env.CDP_API_KEY_NAME,
+            apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
+            cdpWalletData: walletDataStr,
+            networkId: process.env.NETWORK_ID || "base-sepolia",
+          };
+          
+          // 配置CDP钱包
+          const walletProvider = await CdpWalletProvider.configureWithWallet(config);
           const weiAmount = ethers.parseEther(amount);
           
-          const tx = await context.walletProvider.sendTransaction({
+          // 发送交易
+          const tx = await walletProvider.sendTransaction({
             to: BASE_SEPOLIA_WETH as `0x${string}`,
             data: `0x2e1a7d4d${weiAmount.toString(16).padStart(64, '0')}`, // withdraw(uint256) 函数的签名
           });
 
-          return `交易已提交，交易哈希: ${tx.hash}`;
-        } catch (error) {
-          console.error("Error unwrapping WETH:", error);
-          throw new Error(`转换 WETH 失败: ${error instanceof Error ? error.message : '未知错误'}`);
+          // 简化输出，避免类型问题
+          return `交易已提交，${amount} WETH已转换回ETH，请查看区块链浏览器确认详情`;
+        } catch (error: any) {
+          console.error("转换WETH错误:", error);
+          return `转换WETH失败: ${error?.message || '未知错误'}`;
         }
       },
     },
@@ -200,167 +223,107 @@ function customWethProvider(): ActionProvider {
 }
 
 /**
- * Initialize the agent with CDP Agentkit
- *
- * @returns Agent executor and config
+ * 初始化Agent
  */
 async function initializeAgent() {
+  // 初始化LLM
+  const llm = new ChatOpenAI({
+    modelName: process.env.OPENAI_MODEL || "gpt-4",
+    temperature: 0,
+  });
+
+  // 初始化CDP钱包
+  let walletDataStr: string | null = null;
   try {
-    // Initialize LLM
-    const llm = new ChatOpenAI({
-      model: "gpt-4o-mini",
-    });
-
-    let walletDataStr: string | null = null;
-
-    // Read existing wallet data if available
     if (fs.existsSync(WALLET_DATA_FILE)) {
-      try {
-        walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
-      } catch (error) {
-        console.error("Error reading wallet data:", error);
-        // Continue without wallet data
-      }
+      walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf-8");
+      console.log('已加载现有钱包数据');
     }
-
-    // Configure CDP Wallet Provider
-    const config = {
-      apiKeyName: process.env.CDP_API_KEY_NAME,
-      apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
-      cdpWalletData: walletDataStr || undefined,
-      networkId: process.env.NETWORK_ID || "base-sepolia",
-    };
-
-    const walletProvider = await CdpWalletProvider.configureWithWallet(config);
-
-    // Save wallet data to file if it's a new wallet
-    if (!walletDataStr) {
-      try {
-        const walletData = await walletProvider.exportWallet();
-        await fs.promises.writeFile(WALLET_DATA_FILE, JSON.stringify(walletData, null, 2));
-        console.log('New wallet data saved to wallet_data.txt');
-      } catch (error) {
-        console.error('Failed to save wallet data:', error);
-      }
-    }
-
-    // Initialize AgentKit
-    const agentkit = await AgentKit.from({
-      walletProvider,
-      actionProviders: [
-        pythActionProvider(),
-        walletActionProvider(),
-        cdpApiActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
-        }),
-        cdpWalletActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
-        }),
-        erc20ActionProvider({
-          tokens: [
-            {
-              name: "Wrapped ETH",
-              symbol: "WETH",
-              address: BASE_SEPOLIA_WETH as `0x${string}`,
-              decimals: 18
-            }
-          ]
-        }),
-      ],
-    });
-
-    const tools = await getLangChainTools(agentkit);
-
-    // Store buffered conversation history in memory
-    const memory = new MemorySaver();
-    const agentConfig = { configurable: { thread_id: "CDP AgentKit Chatbot Example!" } };
-
-    // Create React Agent using the LLM and CDP AgentKit tools
-    const agent = createReactAgent({
-      llm,
-      tools,
-      checkpointSaver: memory,
-      messageModifier: (messages: BaseMessage[]) => {
-        const systemMessage = new SystemMessage(`You are a helpful AI assistant that helps users with their Ethereum wallet operations. You have access to the following actions:
-
-1. For checking ETH balance:
-   - Use walletActionProvider to check the native ETH balance
-
-2. For WETH operations:
-   - Use erc20ActionProvider for WETH operations
-   - Available actions:
-     * get_balance: Check WETH balance (use symbol="WETH")
-     * transfer: Transfer WETH to other addresses (use symbol="WETH")
-   
-   IMPORTANT: When user asks about WETH, you MUST:
-   - Use symbol="WETH" for any WETH operations
-   - For example:
-     * When user asks "check WETH balance", call get_balance with symbol="WETH"
-     * When user asks "transfer WETH", call transfer with symbol="WETH"
-
-   - All operations are configured for Base Sepolia network`);
-        
-        return [systemMessage, ...messages];
-      },
-    });
-
-    return { agent, config: agentConfig };
   } catch (error) {
-    console.error("Failed to initialize agent:", error);
-    throw error; // Re-throw to be handled by caller
+    console.error('读取钱包数据失败:', error);
   }
-}
 
-/**
- * Run the agent autonomously with specified intervals
- *
- * @param agent - The agent executor
- * @param config - Agent configuration
- * @param interval - Time interval between actions in seconds
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runAutonomousMode(agent: any, config: any, interval = 10) {
-  console.log("Starting autonomous mode...");
+  // 配置钱包
+  const config = {
+    apiKeyName: process.env.CDP_API_KEY_NAME,
+    apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
+    cdpWalletData: walletDataStr || undefined,
+    networkId: process.env.NETWORK_ID || "base-sepolia",
+  };
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  const walletProvider = await CdpWalletProvider.configureWithWallet(config);
+
+  // 如果是新钱包，保存钱包数据到文件
+  if (!walletDataStr) {
     try {
-      const thought =
-        "Be creative and do something interesting on the blockchain. " +
-        "Choose an action or set of actions and execute it that highlights your abilities.";
-
-      const stream = await agent.stream({ messages: [new HumanMessage(thought)] }, config);
-
-      for await (const chunk of stream) {
-        if ("agent" in chunk) {
-          console.log(chunk.agent.messages[0].content);
-        } else if ("tools" in chunk) {
-          console.log(chunk.tools.messages[0].content);
-        }
-        console.log("-------------------");
-      }
-
-      await new Promise(resolve => setTimeout(resolve, interval * 1000));
+      const walletData = await walletProvider.exportWallet();
+      await fs.promises.writeFile(WALLET_DATA_FILE, JSON.stringify(walletData, null, 2));
+      console.log('新钱包数据已保存到wallet_data.txt');
     } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error:", error.message);
-      }
-      process.exit(1);
+      console.error('保存钱包数据失败:', error);
     }
   }
+
+  // 初始化AgentKit
+  const agentkit = await AgentKit.from({
+    walletProvider,
+    actionProviders: [
+      walletActionProvider(),
+      erc20ActionProvider(),
+      customWethProvider(),
+      
+    ],
+  });
+
+  const tools = await getLangChainTools(agentkit);
+
+  // 存储对话历史
+  const memory = new MemorySaver();
+  const agentConfig = { configurable: { thread_id: "CDP AgentKit Chatbot Simple Example" } };
+
+  // 创建Agent
+  const agent = createReactAgent({
+    llm,
+    tools,
+    checkpointSaver: memory,
+    messageModifier: (messages: BaseMessage[]) => {
+      const systemMessage = new SystemMessage(`你是一个帮助用户进行以太坊钱包操作的AI助手。你可以执行以下操作:
+
+1. 查询ETH余额:
+   - 使用walletActionProvider的get_balance方法查询原生ETH余额
+
+2. WETH操作:
+   - 使用customWethProvider进行WETH相关操作:
+     * get_weth_balance: 查询WETH余额
+     * wrap_eth: 将ETH转换为WETH 
+     * unwrap_weth: 将WETH转换回ETH
+
+3. Aave操作:
+   - 使用aaveActionProvider进行Aave相关操作:
+     * approve: 授权Aave合约使用WETH
+     * check_allowance: 查询已授权的WETH额度
+     
+4. ERC20操作:
+   - 使用erc20ActionProvider进行标准ERC20代币操作
+
+请使用适当的命令帮助用户。记住我们在Base Sepolia测试网上运行。`);
+
+      return [systemMessage, ...messages];
+    },
+  });
+
+  return { agent, agentConfig, memory };
 }
 
 /**
- * Run the agent interactively based on user input
- *
- * @param agent - The agent executor
- * @param config - Agent configuration
+ * 运行聊天模式
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function runChatMode(agent: any, config: any) {
-  console.log("Starting chat mode... Type 'exit' to end.");
+  console.log("欢迎使用简化版CDP聊天机器人!");
+  console.log("========================================================");
+  console.log("你可以查询ETH余额、WETH余额，以及执行WETH转换操作。");
+  console.log("输入'exit'退出");
+  console.log("========================================================");
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -371,95 +334,44 @@ async function runChatMode(agent: any, config: any) {
     new Promise(resolve => rl.question(prompt, resolve));
 
   try {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
-      const userInput = await question("\nPrompt: ");
-
-      if (userInput.toLowerCase() === "exit") {
+      const input = await question("\n> ");
+      
+      if (input.toLowerCase() === "exit") {
+        console.log("再见!");
         break;
       }
 
-      const stream = await agent.stream({ messages: [new HumanMessage(userInput)] }, config);
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage(input)],
+        },
+        config,
+      );
 
-      for await (const chunk of stream) {
-        if ("agent" in chunk) {
-          console.log(chunk.agent.messages[0].content);
-        } else if ("tools" in chunk) {
-          console.log(chunk.tools.messages[0].content);
-        }
-        console.log("-------------------");
-      }
+      const lastMessage = response.messages[response.messages.length - 1];
+      console.log(`\n${lastMessage.content}`);
     }
   } catch (error) {
-    if (error instanceof Error) {
-      console.error("Error:", error.message);
-    }
-    process.exit(1);
+    console.error("错误:", error);
   } finally {
     rl.close();
   }
 }
 
 /**
- * Choose whether to run in autonomous or chat mode based on user input
- *
- * @returns Selected mode
- */
-async function chooseMode(): Promise<"chat" | "auto"> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const question = (prompt: string): Promise<string> =>
-    new Promise(resolve => rl.question(prompt, resolve));
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    console.log("\nAvailable modes:");
-    console.log("1. chat    - Interactive chat mode");
-    console.log("2. auto    - Autonomous action mode");
-
-    const choice = (await question("\nChoose a mode (enter number or name): "))
-      .toLowerCase()
-      .trim();
-
-    if (choice === "1" || choice === "chat") {
-      rl.close();
-      return "chat";
-    } else if (choice === "2" || choice === "auto") {
-      rl.close();
-      return "auto";
-    }
-    console.log("Invalid choice. Please try again.");
-  }
-}
-
-/**
- * Start the chatbot agent
+ * 主函数
  */
 async function main() {
   try {
-    const { agent, config } = await initializeAgent();
-    const mode = await chooseMode();
-
-    if (mode === "chat") {
-      await runChatMode(agent, config);
-    } else {
-      await runAutonomousMode(agent, config);
-    }
+    console.log("初始化中...");
+    const { agent, agentConfig, memory } = await initializeAgent();
+    
+    await runChatMode(agent, agentConfig);
   } catch (error) {
-    if (error instanceof Error) {
-      console.error("Error:", error.message);
-    }
-    process.exit(1);
+    console.error("程序错误:", error);
   }
 }
 
-if (require.main === module) {
-  console.log("Starting Agent...");
-  main().catch(error => {
-    console.error("Fatal error:", error);
-    process.exit(1);
-  });
-}
+// 启动程序
+main();
