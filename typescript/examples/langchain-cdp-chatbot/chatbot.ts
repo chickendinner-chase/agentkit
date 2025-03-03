@@ -258,7 +258,16 @@ async function initializeAgent() {
           apiKeyName: process.env.CDP_API_KEY_NAME,
           apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
         }),
-        erc20ActionProvider(),
+        erc20ActionProvider({
+          tokens: [
+            {
+              name: "Wrapped ETH",
+              symbol: "WETH",
+              address: BASE_SEPOLIA_WETH as `0x${string}`,
+              decimals: 18
+            }
+          ]
+        }),
       ],
     });
 
@@ -282,14 +291,14 @@ async function initializeAgent() {
 2. For WETH operations:
    - Use erc20ActionProvider for WETH operations
    - Available actions:
-     * get_balance: Check WETH balance
-     * transfer: Transfer WETH to other addresses
+     * get_balance: Check WETH balance (use symbol="WETH")
+     * transfer: Transfer WETH to other addresses (use symbol="WETH")
    
    IMPORTANT: When user asks about WETH, you MUST:
-   - Use "${BASE_SEPOLIA_WETH}" as the contract address for any WETH operations
+   - Use symbol="WETH" for any WETH operations
    - For example:
-     * When user asks "check WETH balance", call get_balance with contractAddress="${BASE_SEPOLIA_WETH}"
-     * When user asks "transfer WETH", call transfer with contractAddress="${BASE_SEPOLIA_WETH}"
+     * When user asks "check WETH balance", call get_balance with symbol="WETH"
+     * When user asks "transfer WETH", call transfer with symbol="WETH"
 
    - All operations are configured for Base Sepolia network`);
         
