@@ -211,12 +211,111 @@ function customWethProvider(): ActionProvider {
         }
       },
     },
+    {
+      name: "approve_weth",
+      description: "授权Aave合约使用WETH代币",
+      schema: z.object({
+        amount: z.string().describe("要授权的WETH数量"),
+      }),
+      invoke: async (args: any, { walletProvider }) => {
+        try {
+          console.log("调用approve_weth方法");
+          console.log("参数:", JSON.stringify(args));
+          
+          if (!walletProvider) {
+            console.error("钱包提供者未初始化");
+            return "错误：钱包提供者未初始化";
+          }
+          
+          const { params } = args;
+          const amount = params.amount;
+          
+          // 打印用户地址以确认
+          const userAddress = walletProvider.getAddress();
+          console.log(`用户地址: ${userAddress}`);
+          
+          // Aave池合约地址 (Base Sepolia)
+          const spenderAddress = "0x6aCC8F7AF8EC783e129cc4412e3984414b953B01";
+          
+          // 检查WETH余额 - 确保使用正确的合约和调用方式
+          const wethContract = {
+            address: BASE_SEPOLIA_WETH as `0x${string}`,
+            abi: [
+              {
+                type: "function",
+                name: "balanceOf",
+                inputs: [{ name: "account", type: "address" }],
+                outputs: [{ type: "uint256" }],
+                stateMutability: "view",
+              },
+              {
+                type: "function",
+                name: "decimals",
+                inputs: [],
+                outputs: [{ type: "uint8" }],
+                stateMutability: "view",
+              }
+            ],
+          };
+          
+          // 获取WETH余额
+          const wethBalance = await walletProvider.readContract({
+            ...wethContract,
+            functionName: "balanceOf",
+            args: [userAddress],
+          });
+          
+          // 获取WETH小数位
+          const decimals = await walletProvider.readContract({
+            ...wethContract,
+            functionName: "decimals",
+            args: [],
+          });
+          
+          console.log(`WETH余额: ${wethBalance}`);
+          console.log(`WETH小数位: ${decimals}`);
+          
+          // 将用户输入的金额转为Wei
+          const weiAmount = ethers.parseEther(amount);
+          console.log(`授权数量(Wei): ${weiAmount}`);
+          
+          // 检查余额是否足够（虽然授权不需要余额，但为了安全）
+          const formattedBalance = ethers.formatUnits(wethBalance, decimals);
+          console.log(`格式化后的余额: ${formattedBalance}`);
+          
+          // 不进行余额检查，因为授权不消耗代币
+          // 直接构建approve交易
+          
+          // 使用直接的十六进制编码，避免Interface库可能的问题
+          // approve(address,uint256) => 0x095ea7b3
+          const spenderParam = spenderAddress.slice(2).padStart(64, '0');
+          const amountParam = weiAmount.toString(16).padStart(64, '0');
+          const data = `0x095ea7b3${spenderParam}${amountParam}` as `0x${string}`;
+          
+          console.log(`交易数据: ${data}`);
+          
+          // 发送交易
+          const txHash = await walletProvider.sendTransaction({
+            to: BASE_SEPOLIA_WETH as `0x${string}`,
+            data: data,
+            gas: 100000n
+          });
+          
+          console.log(`交易哈希: ${txHash}`);
+          
+          return `授权交易已发送！交易哈希: ${txHash}\n您已授权Aave合约使用 ${amount} WETH`;
+        } catch (error) {
+          console.error("授权错误:", error);
+          console.error("错误详情:", JSON.stringify(error, null, 2));
+          return `授权操作失败: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      }
+    }
   ];
 
   return {
     name: "weth",
     actions,
-    actionProviders: [],
     getActions: () => actions,
     supportsNetwork: () => true,
   } as unknown as ActionProvider;
@@ -271,7 +370,7 @@ async function initializeAgent() {
       walletActionProvider(),
       erc20ActionProvider(),
       customWethProvider(),
-      
+      aaveActionProvider(),
     ],
   });
 
@@ -287,26 +386,38 @@ async function initializeAgent() {
     tools,
     checkpointSaver: memory,
     messageModifier: (messages: BaseMessage[]) => {
-      const systemMessage = new SystemMessage(`你是一个帮助用户进行以太坊钱包操作的AI助手。你可以执行以下操作:
+      const systemMessage = new SystemMessage(`你是一个帮助用户进行以太坊钱包操作和Aave协议交互的AI助手。你可以执行以下操作:
 
 1. 查询ETH余额:
-   - 使用walletActionProvider的get_balance方法查询原生ETH余额
+   - 使用"check eth"或"get_balance"查询原生ETH余额
 
 2. WETH操作:
-   - 使用customWethProvider进行WETH相关操作:
-     * get_weth_balance: 查询WETH余额
-     * wrap_eth: 将ETH转换为WETH 
-     * unwrap_weth: 将WETH转换回ETH
+   - 使用"check weth"或"get_weth_balance"查询WETH余额
+   - 使用"wrap eth [数量]"将ETH转换为WETH，例如"wrap eth 0.01" 
+   - 使用"unwrap weth [数量]"将WETH转换回ETH，例如"unwrap weth 0.01"
 
 3. Aave操作:
-   - 使用aaveActionProvider进行Aave相关操作:
-     * approve: 授权Aave合约使用WETH
-     * check_allowance: 查询已授权的WETH额度
-     
-4. ERC20操作:
-   - 使用erc20ActionProvider进行标准ERC20代币操作
+   - 使用"approve_weth_for_aave [数量]"授权Aave使用WETH，例如"approve_weth_for_aave 0.0001"
+   - 使用"check_atoken_balance"查询用户在Aave上的aWETH余额
+   - 使用"supply_weth [数量]"向Aave存入WETH并获得aWETH，例如"supply_weth 0.0001"
+   - 使用"withdraw_weth [数量]"将aWETH赎回为WETH，例如"withdraw_weth 0.0001"
+   - 使用"borrow_weth [数量]"在存入抵押品后从Aave借出WETH，例如"borrow_weth 0.0001"
+   - 使用"repay_weth [数量]"向Aave偿还借出的WETH，例如"repay_weth 0.0001"
 
-请使用适当的命令帮助用户。记住我们在Base Sepolia测试网上运行。`);
+Aave协议说明:
+- 当你向Aave存入WETH时，会获得对应的aWETH代币，这代表你的存款凭证
+- 使用withdraw_weth时，你实际上是用aWETH赎回对应的WETH
+- 存款(supply)后才能进行借款(borrow)操作
+- 必须先授权(approve_weth_for_aave)才能存入WETH
+
+对于用户的Aave相关请求:
+- 当用户提到"查看Aave余额"时，使用check_atoken_balance查询
+- 当用户提到"存入/供应WETH到Aave"时，使用supply_weth
+- 当用户提到"提取/取出WETH"时，使用withdraw_weth
+- 当用户提到"借WETH"时，使用borrow_weth
+- 当用户提到"还WETH"时，使用repay_weth
+
+请帮助用户完成这些操作，使用适当的命令。记住我们在Base Sepolia测试网上运行。`);
 
       return [systemMessage, ...messages];
     },
