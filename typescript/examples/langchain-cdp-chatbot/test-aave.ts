@@ -230,6 +230,51 @@ async function testAaveProvider() {
       console.error("执行supply_weth失败:", error);
     }
     
+    // =============================================================
+    // ===== 3. 测试withdraw_weth操作 (从Aave提取WETH) =============
+    // =============================================================
+    
+    showTestStage("测试操作: 提取 WETH (withdraw_weth)");
+    try {
+      const withdrawAction = actions.find(a => a.name === "withdraw_weth");
+      if (withdrawAction) {
+        // 定义要提取的WETH数量
+        const withdrawAmount = "0.00005";
+        
+        console.log(`准备从Aave提取 ${withdrawAmount} WETH...`);
+        
+        const result = await withdrawAction.invoke({ 
+          walletProvider: walletProvider,
+          params: { amount: withdrawAmount }
+        });
+        
+        console.log(result);
+        
+        // 等待10秒，确保交易被确认
+        console.log("等待交易确认...");
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        // 提款后再次查询WETH余额和aToken余额
+        console.log("\n提款后查询WETH余额:");
+        const checkWethAction = actions.find(a => a.name === "check_weth_balance");
+        if (checkWethAction) {
+          const wethResult = await checkWethAction.invoke({ walletProvider: walletProvider });
+          console.log(wethResult);
+        }
+        
+        console.log("\n提款后查询aToken余额:");
+        const checkBalanceAction = actions.find(a => a.name === "check_atoken_balance");
+        if (checkBalanceAction) {
+          const balanceResult = await checkBalanceAction.invoke({ walletProvider: walletProvider });
+          console.log(balanceResult);
+        }
+      } else {
+        console.log("未找到withdraw_weth操作");
+      }
+    } catch (error) {
+      console.error("执行withdraw_weth失败:", error);
+    }
+    
     showTestStage("测试完成");
     console.log("Aave操作提供者功能测试已完成！");
   } catch (error) {

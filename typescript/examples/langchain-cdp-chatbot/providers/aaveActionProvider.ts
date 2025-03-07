@@ -24,6 +24,9 @@ import {
 } from "./schemas";
 
 // 导入Aave contract-helpers
+// 注释原因: 我们最终使用viem直接构建交易，不再使用@aave/contract-helpers库
+// 保留这些导入是为了未来可能的扩展和调试目的
+/*
 import { 
   Pool, 
   PoolInterface, 
@@ -31,6 +34,10 @@ import {
   InterestRate 
 } from '@aave/contract-helpers';
 import { providers, Wallet } from 'ethers';
+*/
+
+// 我们仍然需要ethers的providers用于某些基础功能
+import { providers } from 'ethers';
 
 // 添加AmountSchema定义
 const AmountSchema = z.object({
@@ -46,6 +53,10 @@ const CORRECT_WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
  */
 export function aaveActionProvider(): ActionProvider {
   // 创建adapter以兼容ethers和WalletProvider
+  // 注释原因: 我们最终使用直接的JsonRpcProvider而不是通过adapter
+  // 这个函数的目的是将WalletProvider转换为ethers兼容的provider
+  // 保留此函数是为了未来可能的扩展和调试目的
+  /*
   function createAdapter(walletProvider: WalletProvider): providers.JsonRpcProvider {
     // 创建一个最小的包装，使WalletProvider可以与ethers配合使用
     const adapter = new providers.JsonRpcProvider();
@@ -71,13 +82,18 @@ export function aaveActionProvider(): ActionProvider {
       }
 
       // 其他方法使用原始实现
-      return originalSend.call(adapter, method, params);
+      return originalSend.call(this, method, params);
     };
 
     return adapter;
   }
+  */
 
   // 创建Aave Pool实例
+  // 注释原因: 我们最终使用viem直接构建交易，不再使用@aave/contract-helpers的Pool
+  // 这个函数的目的是创建一个Aave Pool实例，用于与Aave协议交互
+  // 保留此函数是为了未来可能的扩展和调试目的
+  /*
   async function createAavePool(walletProvider: WalletProvider): Promise<Pool> {
     try {
       // 获取网络ID
@@ -104,6 +120,10 @@ export function aaveActionProvider(): ActionProvider {
       throw error;
     }
   }
+  */
+
+  // 定义一个类型别名，用于替代注释掉的Pool类型
+  type AavePool = any;
 
   /**
    * 实现Aave操作提供者
@@ -416,25 +436,32 @@ export function aaveActionProvider(): ActionProvider {
             // 将数量转为Wei单位
             const weiAmount = parseUnits(amount, 18);
             
-            // Aave Pool接口 - withdraw函数
-            const interfaceData = {
-              abi: ABI.POOL_ABI.WITHDRAW,
-              functionName: "withdraw",
-              args: [
-                config.WETH_ADDRESS,
-                weiAmount,
-                walletProvider.getAddress()
-              ],
-            };
+            // 准备资产地址和池地址
+            const assetAddress = config.WETH_ADDRESS.toLowerCase() as `0x${string}`;
+            const poolAddress = config.AAVE_POOL_ADDRESS.toLowerCase() as `0x${string}`;
+            const userAddress = walletProvider.getAddress();
             
-            // 编码withdraw函数调用
-            const data = walletProvider.encodeDeployData 
-              ? walletProvider.encodeDeployData(interfaceData) as `0x${string}`
-              : "0x" as `0x${string}`;
+            console.log("WETH地址:", assetAddress);
+            console.log("Pool地址:", poolAddress);
+            console.log("用户地址:", userAddress);
+            console.log("提取金额:", weiAmount.toString());
+            
+            // 使用viem的encodeFunctionData编码withdraw函数调用
+            const data = encodeFunctionData({
+              abi: ABI.POOL_ABI.WITHDRAW,
+              functionName: 'withdraw',
+              args: [
+                assetAddress,
+                weiAmount,
+                userAddress
+              ]
+            });
+            
+            console.log("编码后的交易数据:", data);
             
             // 发送交易
             const txHash = await walletProvider.sendTransaction({
-              to: config.AAVE_POOL_ADDRESS as `0x${string}`,
+              to: poolAddress,
               data,
               gas: GAS_LIMITS.WITHDRAW,
             });
@@ -471,27 +498,34 @@ export function aaveActionProvider(): ActionProvider {
             // 将数量转为Wei单位
             const weiAmount = parseUnits(amount, 18);
             
-            // Aave Pool接口 - borrow函数
-            const interfaceData = {
+            // 准备资产地址和池地址
+            const assetAddress = config.WETH_ADDRESS.toLowerCase() as `0x${string}`;
+            const poolAddress = config.AAVE_POOL_ADDRESS.toLowerCase() as `0x${string}`;
+            const userAddress = walletProvider.getAddress();
+            
+            console.log("WETH地址:", assetAddress);
+            console.log("Pool地址:", poolAddress);
+            console.log("用户地址:", userAddress);
+            console.log("借款金额:", weiAmount.toString());
+            
+            // 使用viem的encodeFunctionData编码borrow函数调用
+            const data = encodeFunctionData({
               abi: ABI.POOL_ABI.BORROW,
-              functionName: "borrow",
+              functionName: 'borrow',
               args: [
-                config.WETH_ADDRESS,
+                assetAddress,
                 weiAmount,
                 1, // 变动利率模式
                 0, // 推荐码
-                walletProvider.getAddress()
-              ],
-            };
+                userAddress
+              ]
+            });
             
-            // 编码borrow函数调用
-            const data = walletProvider.encodeDeployData 
-              ? walletProvider.encodeDeployData(interfaceData) as `0x${string}`
-              : "0x" as `0x${string}`;
+            console.log("编码后的交易数据:", data);
             
             // 发送交易
             const txHash = await walletProvider.sendTransaction({
-              to: config.AAVE_POOL_ADDRESS as `0x${string}`,
+              to: poolAddress,
               data,
               gas: GAS_LIMITS.BORROW,
             });
@@ -528,26 +562,33 @@ export function aaveActionProvider(): ActionProvider {
             // 将数量转为Wei单位
             const weiAmount = parseUnits(amount, 18);
             
-            // Aave Pool接口 - repay函数
-            const interfaceData = {
+            // 准备资产地址和池地址
+            const assetAddress = config.WETH_ADDRESS.toLowerCase() as `0x${string}`;
+            const poolAddress = config.AAVE_POOL_ADDRESS.toLowerCase() as `0x${string}`;
+            const userAddress = walletProvider.getAddress();
+            
+            console.log("WETH地址:", assetAddress);
+            console.log("Pool地址:", poolAddress);
+            console.log("用户地址:", userAddress);
+            console.log("还款金额:", weiAmount.toString());
+            
+            // 使用viem的encodeFunctionData编码repay函数调用
+            const data = encodeFunctionData({
               abi: ABI.POOL_ABI.REPAY,
-              functionName: "repay",
+              functionName: 'repay',
               args: [
-                config.WETH_ADDRESS,
+                assetAddress,
                 weiAmount,
                 1, // 变动利率模式
-                walletProvider.getAddress()
-              ],
-            };
+                userAddress
+              ]
+            });
             
-            // 编码repay函数调用
-            const data = walletProvider.encodeDeployData 
-              ? walletProvider.encodeDeployData(interfaceData) as `0x${string}`
-              : "0x" as `0x${string}`;
+            console.log("编码后的交易数据:", data);
             
             // 发送交易
             const txHash = await walletProvider.sendTransaction({
-              to: config.AAVE_POOL_ADDRESS as `0x${string}`,
+              to: poolAddress,
               data,
               gas: GAS_LIMITS.REPAY,
             });
