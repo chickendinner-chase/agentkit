@@ -2,7 +2,7 @@ import { CdpWalletProvider } from "@coinbase/agentkit";
 import { aaveActionProvider } from "./providers";
 import * as dotenv from "dotenv";
 import * as fs from "fs";
-import { ethers } from "ethers";
+import { formatEther } from "viem";
 
 dotenv.config();
 
@@ -10,10 +10,25 @@ dotenv.config();
 const WALLET_DATA_FILE = "wallet_data.txt";
 
 /**
+ * 当前测试阶段
+ */
+let currentTestStage = "初始化";
+
+/**
+ * 显示当前测试阶段
+ */
+function showTestStage(stage: string) {
+  currentTestStage = stage;
+  console.log("\n===========================================================");
+  console.log(`当前测试阶段: ${stage}`);
+  console.log("===========================================================\n");
+}
+
+/**
  * 测试Aave操作提供者
  */
 async function testAaveProvider() {
-  console.log("=== 测试Aave操作提供者 ===");
+  showTestStage("开始测试 Aave 操作提供者");
   
   // 加载钱包数据
   let walletDataStr: string | null = null;
@@ -41,7 +56,7 @@ async function testAaveProvider() {
       networkId: process.env.NETWORK_ID || "base-sepolia",
     };
 
-    console.log("初始化钱包...");
+    showTestStage("初始化钱包");
     const walletProvider = await CdpWalletProvider.configureWithWallet(config);
     
     // 获取钱包地址
@@ -52,18 +67,14 @@ async function testAaveProvider() {
     console.log("\n查询ETH余额:");
     try {
       const ethBalance = await walletProvider.getBalance();
-      const formattedEthBalance = ethers.formatEther(ethBalance.toString());
+      const formattedEthBalance = formatEther(ethBalance as bigint);
       console.log(`ETH余额: ${formattedEthBalance} ETH`);
     } catch (error) {
       console.error("查询ETH余额失败:", error);
     }
     
-    // ========== 测试Aave操作提供者 ==========
-    
-    console.log("\n========== Aave操作提供者测试 ==========");
-    
     // 初始化Aave提供者
-    console.log("\n初始化Aave提供者:");
+    showTestStage("初始化 Aave 提供者");
     const aaveProvider = aaveActionProvider();
     console.log(`Aave提供者名称: ${aaveProvider.name}`);
     
@@ -77,11 +88,11 @@ async function testAaveProvider() {
     });
     
     // 测试check_weth_balance操作
-    console.log("\n测试check_weth_balance操作:");
+    showTestStage("测试 WETH 余额查询");
     try {
       const checkWethAction = actions.find(a => a.name === "check_weth_balance");
       if (checkWethAction) {
-        const result = await checkWethAction.invoke({ walletProvider });
+        const result = await checkWethAction.invoke({ walletProvider: walletProvider });
         console.log(result);
       } else {
         console.log("未找到check_weth_balance操作");
@@ -91,11 +102,11 @@ async function testAaveProvider() {
     }
     
     // 测试check_atoken_balance操作
-    console.log("\n测试check_atoken_balance操作:");
+    showTestStage("测试 aToken 余额查询");
     try {
       const checkBalanceAction = actions.find(a => a.name === "check_atoken_balance");
       if (checkBalanceAction) {
-        const result = await checkBalanceAction.invoke({ walletProvider });
+        const result = await checkBalanceAction.invoke({ walletProvider: walletProvider });
         console.log(result);
       } else {
         console.log("未找到check_atoken_balance操作");
@@ -105,11 +116,11 @@ async function testAaveProvider() {
     }
     
     // 测试check_weth_allowance操作
-    console.log("\n测试check_weth_allowance操作:");
+    showTestStage("测试 WETH 授权查询");
     try {
       const checkAllowanceAction = actions.find(a => a.name === "check_weth_allowance");
       if (checkAllowanceAction) {
-        const result = await checkAllowanceAction.invoke({ walletProvider });
+        const result = await checkAllowanceAction.invoke({ walletProvider: walletProvider });
         console.log(result);
       } else {
         console.log("未找到check_weth_allowance操作");
@@ -119,7 +130,7 @@ async function testAaveProvider() {
     }
     
     // 测试网络兼容性
-    console.log("\n测试网络兼容性:");
+    showTestStage("测试网络兼容性");
     
     // Base Sepolia (应该支持)
     const baseSepolia = {
@@ -141,24 +152,22 @@ async function testAaveProvider() {
     // ===== 真实交易操作 ============
     // ==========================================
     
-    /*
     // =============================================================
     // ===== 1. 测试approve_weth_for_aave操作 (授权Aave使用WETH) =====
     // =============================================================
     
-    console.log("\n测试approve_weth_for_aave操作 (将执行交易):");
+    showTestStage("测试操作: 授权 WETH (approve_weth_for_aave)");
     try {
       const approveAction = actions.find(a => a.name === "approve_weth_for_aave");
       if (approveAction) {
-        // 定义要授权的WETH数量 - 建议使用小额
-        // 0.0002 WETH是一个合理的测试金额 (改为之前的两倍，便于验证)
+        // 定义要授权的WETH数量
         const approveAmount = "0.0002";
         
         console.log(`准备授权Aave使用 ${approveAmount} WETH...`);
         
         const result = await approveAction.invoke({ 
-          walletProvider,
-          params: { amount: approveAmount } 
+          walletProvider: walletProvider,
+          amount: approveAmount
         });
         
         console.log(result);
@@ -171,7 +180,7 @@ async function testAaveProvider() {
         console.log("\n授权后再次查询WETH授权状态:");
         const checkAllowanceAction = actions.find(a => a.name === "check_weth_allowance");
         if (checkAllowanceAction) {
-          const allowanceResult = await checkAllowanceAction.invoke({ walletProvider });
+          const allowanceResult = await checkAllowanceAction.invoke({ walletProvider: walletProvider });
           console.log(allowanceResult);
         } else {
           console.log("未找到check_weth_allowance操作");
@@ -182,24 +191,23 @@ async function testAaveProvider() {
     } catch (error) {
       console.error("执行approve_weth_for_aave失败:", error);
     }
-    */
     
     // =============================================================
     // ===== 2. 测试supply_weth操作 (向Aave存入WETH) ===============
     // =============================================================
     
-    console.log("\n测试supply_weth操作 (将执行交易):");
+    showTestStage("测试操作: 存入 WETH (supply_weth)");
     try {
       const supplyAction = actions.find(a => a.name === "supply_weth");
       if (supplyAction) {
-        // 定义要存入的WETH数量 - 使用实际可用余额
-        const supplyAmount = "0.0001"; // 修改为小于实际余额(0.0001001)的金额
+        // 定义要存入的WETH数量
+        const supplyAmount = "0.0001";
         
         console.log(`准备向Aave存入 ${supplyAmount} WETH...`);
         
         const result = await supplyAction.invoke({ 
-          walletProvider,
-          params: { amount: supplyAmount } 
+          walletProvider: walletProvider,
+          amount: supplyAmount 
         });
         
         console.log(result);
@@ -212,7 +220,7 @@ async function testAaveProvider() {
         console.log("\n存款后查询aToken余额:");
         const checkBalanceAction = actions.find(a => a.name === "check_atoken_balance");
         if (checkBalanceAction) {
-          const balanceResult = await checkBalanceAction.invoke({ walletProvider });
+          const balanceResult = await checkBalanceAction.invoke({ walletProvider: walletProvider });
           console.log(balanceResult);
         }
       } else {
@@ -222,7 +230,8 @@ async function testAaveProvider() {
       console.error("执行supply_weth失败:", error);
     }
     
-    console.log("\n测试完成！Aave操作提供者功能正常。");
+    showTestStage("测试完成");
+    console.log("Aave操作提供者功能测试已完成！");
   } catch (error) {
     console.error("测试失败:", error);
   }

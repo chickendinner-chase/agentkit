@@ -2,11 +2,11 @@
 
 // Base Sepolia测试网地址
 export const BASE_SEPOLIA = {
-  // Aave V3 Pool地址
-  AAVE_POOL_ADDRESS: "0x6aCC8F7AF8EC783e129cc4412e3984414b953B01",
-  // aWETH代币地址
+  // Aave V3 Pool地址 - 从成功交易中确认
+  AAVE_POOL_ADDRESS: "0x07eA79F68B2B3df564D0A34F8e19D9B1e339814b",
+  // aWETH代币地址 - 已确认
   AWETH_TOKEN_ADDRESS: "0x96e32dE4B1d1617B8c2AE13a88B9cC287239b13f",
-  // WETH地址 - 更新为正确的地址
+  // WETH地址 - Base Sepolia预部署合约
   WETH_ADDRESS: "0x4200000000000000000000000000000000000006",
 };
 
@@ -47,21 +47,82 @@ export const ABI = {
   
   // Aave Pool ABI
   POOL_ABI: {
-    // supply函数
+    // supply方法
     SUPPLY: [
-      "function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external"
+      {
+        name: 'supply',
+        type: 'function',
+        inputs: [
+          { name: 'asset', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'onBehalfOf', type: 'address' },
+          { name: 'referralCode', type: 'uint16' }
+        ],
+        outputs: [],
+        stateMutability: 'nonpayable'
+      }
     ],
-    // withdraw函数
+    // withdraw方法
     WITHDRAW: [
-      "function withdraw(address asset, uint256 amount, address to) external returns (uint256)"
+      {
+        name: 'withdraw',
+        type: 'function',
+        inputs: [
+          { name: 'asset', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'to', type: 'address' }
+        ],
+        outputs: [{ type: 'uint256' }],
+        stateMutability: 'nonpayable'
+      }
     ],
-    // borrow函数
+    // borrow方法
     BORROW: [
-      "function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf) external"
+      {
+        name: 'borrow',
+        type: 'function',
+        inputs: [
+          { name: 'asset', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'interestRateMode', type: 'uint256' },
+          { name: 'referralCode', type: 'uint16' },
+          { name: 'onBehalfOf', type: 'address' }
+        ],
+        outputs: [],
+        stateMutability: 'nonpayable'
+      }
     ],
-    // repay函数
+    // repay方法
     REPAY: [
-      "function repay(address asset, uint256 amount, uint256 rateMode, address onBehalfOf) external returns (uint256)"
+      {
+        name: 'repay',
+        type: 'function',
+        inputs: [
+          { name: 'asset', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'rateMode', type: 'uint256' },
+          { name: 'onBehalfOf', type: 'address' }
+        ],
+        outputs: [{ type: 'uint256' }],
+        stateMutability: 'nonpayable'
+      }
+    ],
+    // getUserAccountData方法
+    GET_USER_ACCOUNT_DATA: [
+      {
+        name: 'getUserAccountData',
+        type: 'function',
+        inputs: [{ name: 'user', type: 'address' }],
+        outputs: [
+          { name: 'totalCollateralBase', type: 'uint256' },
+          { name: 'totalDebtBase', type: 'uint256' },
+          { name: 'availableBorrowsBase', type: 'uint256' },
+          { name: 'currentLiquidationThreshold', type: 'uint256' },
+          { name: 'ltv', type: 'uint256' },
+          { name: 'healthFactor', type: 'uint256' }
+        ],
+        stateMutability: 'view'
+      }
     ]
   }
 };

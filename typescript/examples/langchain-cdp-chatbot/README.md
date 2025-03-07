@@ -8,6 +8,22 @@ This example demonstrates an agent setup as a terminal style chatbot with access
 - "What is the price of BTC?"
 - "Deploy an NFT that will go super viral!"
 - "Deploy an ERC-20 token with total supply 1 billion"
+- "Supply some WETH to Aave" (Coming soon!)
+
+## Project Status
+
+### DeFi Integration Progress
+
+- **Aave Integration (In Progress)**
+  - ✅ Successfully implemented and tested basic Aave operations:
+    - WETH balance queries
+    - aToken balance queries
+    - WETH authorization for Aave protocol
+    - Supply WETH to Aave Pool
+  - 🚧 Next steps:
+    - Integrate Aave operations with the chatbot interface
+    - Implement withdraw, borrow, and repay operations
+    - Add additional error handling and user guidance
 
 ## Prerequisites
 
