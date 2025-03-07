@@ -4,6 +4,7 @@ import {
   walletActionProvider,
   erc20ActionProvider,
 } from "@coinbase/agentkit";
+import { aaveActionProvider } from "./providers";
 import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
@@ -16,7 +17,6 @@ import { BaseMessage } from "@langchain/core/messages";
 import { ActionProvider } from "@coinbase/agentkit";
 import { z } from "zod";
 import { ethers } from "ethers";
-import { aaveActionProvider } from "./aaveActionProvider";
 
 dotenv.config();
 
