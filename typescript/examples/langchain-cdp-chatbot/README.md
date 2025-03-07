@@ -1,79 +1,142 @@
-# CDP AgentKit LangChain Extension Examples - Chatbot Typescript
+# Aave Protocol Integration - AgentKit
 
-This example demonstrates an agent setup as a terminal style chatbot with access to the full set of CDP AgentKit actions.
+This project integrates the Aave protocol into Coinbase's AgentKit framework, enabling AI assistants to perform basic DeFi operations such as checking balances, supplying, borrowing, and repaying.
 
-## Ask the chatbot to engage in the Web3 ecosystem!
+## Project Overview
 
-- "Transfer a portion of your ETH to a random address"
-- "What is the price of BTC?"
-- "Deploy an NFT that will go super viral!"
-- "Deploy an ERC-20 token with total supply 1 billion"
-- "Supply some WETH to Aave" (Coming soon!)
+By integrating with the Aave protocol, this project demonstrates how to build AI assistants with DeFi capabilities using AgentKit. Users can interact with the Aave protocol through natural language without understanding the underlying technical details.
 
-## Project Status
+## Implementation Status
 
-### DeFi Integration Progress
+### Completed Features
 
-- **Aave Integration (In Progress)**
-  - ✅ Successfully implemented and tested basic Aave operations:
-    - WETH balance queries
-    - aToken balance queries
-    - WETH authorization for Aave protocol
-    - Supply WETH to Aave Pool
-  - 🚧 Next steps:
-    - Integrate Aave operations with the chatbot interface
-    - Implement withdraw, borrow, and repay operations
-    - Add additional error handling and user guidance
+We have successfully implemented and tested the following Aave operations:
 
-## Prerequisites
+- ✅ Token Balance Queries
+  - WETH balance check
+  - aWETH (interest-bearing token) balance check
+  - Variable debt token balance check
+  
+- ✅ Allowance Management
+  - Query allowance for Aave protocol
+  - Approve WETH for Aave operations
+  
+- ✅ Supply and Withdrawal
+  - Supply WETH to Aave
+  - Withdraw WETH from Aave
+  
+- ✅ Borrowing and Repayment
+  - Borrow WETH from Aave (variable interest rate)
+  - Repay specific amount of WETH debt
+  - Repay all WETH debt (using max uint256 value)
 
-### Checking Node Version
+### Supported Tokens
 
-Before using the example, ensure that you have the correct version of Node.js installed. The example requires Node.js 18 or higher. You can check your Node version by running:
+- **WETH** (Wrapped ETH) - Base asset for supply and borrow operations
+- **aWETH** (Aave interest-bearing WETH) - Received when supplying WETH
+- **variableDebtWETH** - Represents variable rate debt position
 
+### Current Challenges
+
+- **Wallet Provider Compatibility**: Working on optimizing the integration between AgentKit's WalletProvider interface and blockchain interaction libraries.
+- **Library Selection**: Currently using both viem (for most operations) and ethers.js (for adapter functionality). Need to standardize on one library.
+- **Error Handling**: Improving the handling of specific Aave error codes (currently mapped to number-based errors).
+- **Gas Estimation**: Occasional issues with gas estimation for certain operations that require additional configuration.
+
+## Features
+
+- Query WETH and aWETH token balances
+- Query debt token balances
+- Check authorization limits
+- Authorize Aave to use WETH
+- Supply WETH to Aave
+- Withdraw WETH from Aave
+- Borrow WETH from Aave
+- Repay partial or full WETH debt
+
+## Tech Stack
+
+- TypeScript
+- AgentKit framework
+- Viem library for blockchain interactions
+- Aave V3 protocol (Base Sepolia testnet)
+
+## Installation
+
+1. Clone the repository
 ```bash
-node --version
+git clone <repository-url>
+cd agentkit/typescript/examples/langchain-cdp-chatbot
 ```
 
-If you don't have the correct version, you can install it using [nvm](https://github.com/nvm-sh/nvm):
-
-```bash
-nvm install node
-```
-
-This will automatically install and use the latest version of Node.
-
-### API Keys
-
-You'll need the following API keys:
-- [CDP API Key](https://portal.cdp.coinbase.com/access/api)
-- [OpenAI API Key](https://platform.openai.com/docs/quickstart#create-and-export-an-api-key)
-
-Once you have them, rename the `.env-local` file to `.env` and make sure you set the API keys to their corresponding environment variables:
-
-- "CDP_API_KEY_NAME"
-- "CDP_API_KEY_PRIVATE_KEY"
-- "OPENAI_API_KEY"
-
-## Running the example
-
-From the root directory, run:
-
+2. Install dependencies
 ```bash
 npm install
-npm run build
 ```
 
-This will install the dependencies and build the packages locally. The chatbot example uses the local `@coinbase/agentkit-langchain` and `@coinbase/agentkit` packages. If you make changes to the packages, you can run `npm run build` from root again to rebuild the packages, and your changes will be reflected in the chatbot example.
+3. Install Aave integration dependencies
+```bash
+npm install viem ethers@5
+```
 
-Now from the `typescript/examples/langchain-cdp-chatbot` directory, run:
+## Configuration
+
+1. Create a `.env` file and set the following environment variables
+```
+CDP_API_KEY_NAME=your_api_key_name
+CDP_API_KEY_PRIVATE_KEY=your_private_key
+NETWORK_ID=base-sepolia
+```
+
+2. Ensure you have some Base Sepolia testnet ETH and WETH in your wallet
+
+## Usage
+
+### Running the test script
+
+Use the following command to test Aave functionality:
 
 ```bash
-npm start
+npx ts-node test-aave.ts
 ```
 
-Select "1. chat mode" and start telling your Agent to do things onchain!
+### Available Aave operations
+
+- `check_weth_balance`: Query WETH balance
+- `check_atoken_balance`: Query aWETH balance
+- `check_debt_balance`: Query debt token balance
+- `check_weth_allowance`: Check authorization limits
+- `approve_weth_for_aave`: Authorize Aave to use WETH
+- `supply_weth`: Supply WETH to Aave
+- `withdraw_weth`: Withdraw WETH from Aave
+- `borrow_weth`: Borrow WETH from Aave
+- `repay_weth`: Repay specific amount of WETH debt
+- `repay_all_weth`: Repay all WETH debt
+
+## Aave Integration Details
+
+This project interacts with Aave in two ways:
+
+1. Direct contract calls using the `viem` library
+2. Transaction construction using `encodeFunctionData`
+
+Main contract addresses (Base Sepolia testnet):
+- Aave Pool: 0x07eA79F68B2B3df564D0A34F8e19D9B1e339814b
+- WETH: 0x4200000000000000000000000000000000000006
+- aWETH: 0x96e32dE4B1d1617B8c2AE13a88B9cC287239b13f
+- Variable rate debt WETH: 0xf0f0025dc51f532ab84c33eb9d01583eaa0f74c7
+
+## Notes
+
+- This project uses the Base Sepolia testnet and is not suitable for mainnet
+- Ensure your wallet has sufficient testnet ETH and WETH before performing operations
+- You must supply collateral (WETH) before borrowing
+- When repaying borrowed assets, ensure you use the correct interest rate mode
+
+## Contributing
+
+Pull Requests and Issues are welcome to improve this project.
 
 ## License
 
-Apache-2.0
+[MIT License](LICENSE)

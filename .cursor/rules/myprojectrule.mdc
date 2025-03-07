@@ -1,56 +1,52 @@
 ---
+description: always use in this project
+globs: 
+alwaysApply: false
+---
 description: updating agentkit for aave actions and create a ai agent chat bot that can handle aave actions
 globs: 
 alwaysApply: false
 ---
 
-# Project Rules: AgentKit-Aave 集成 MVP
+# Project Rules: AgentKit-Aave 集成指南
 
 ## 项目目标
-利用 Coinbase AgentKit 开发一个最简化的 AI agent，实现与 Aave 协议的基础交互功能，支持常用 DeFi 操作。
+利用 Coinbase AgentKit 开发 AI agent，实现与 Aave 协议的基础交互功能，支持常用 DeFi 操作。
 
-## 参考资源
+## 关键合约地址 (Base Sepolia)
+- **Aave Pool**: `0x07eA79F68B2B3df564D0A34F8e19D9B1e339814b` (正确的Pool地址)
+- **aWETH**: `0x96e32dE4B1d1617B8c2AE13a88B9cC287239b13f` (存款代币)
+- **WETH**: `0x4200000000000000000000000000000000000006` (Base Sepolia预部署合约)
 
-### Aave 核心协议
-- **Aave V3 核心代码**: https://github.com/aave-dao/aave-v3-origin
-  - 重点关注: `/src/protocol/pool/Pool.sol` 中的核心函数
-  - 关键接口: `/src/interfaces/IPool.sol`
+## 实用工具
+- **viem**: 推荐用于直接构建交易和与智能合约交互
+  - 使用`encodeFunctionData`构建交易数据
+  - 使用`parseUnits`/`formatUnits`处理代币金额
+- **ethers.js v5**: 仅在需要与@aave/contract-helpers配合时使用
 
-### 开发框架
-- **Coinbase AgentKit**: https://github.com/coinbase/agentkit
-  - 注意采用 ActionProvider 模式
-  - 参考示例: `/typescript/examples/` 下的现有示例
+## 关键经验
+1. **地址格式很重要**:
+   - 使用`toLowerCase()`确保地址格式一致性
+   - 确保使用最新的合约地址（测试网合约可能会更新）
 
-### 工具库
-- **ethers.js**: https://github.com/ethers-io/ethers.js
-  - 用于构建交易和与智能合约交互
-- **Aave Utilities**: https://github.com/aave/aave-utilities
-  - 仅用于数学计算和基础工具函数
+2. **操作顺序**:
+   - 先查询余额 → 授权 → 存款/借款 → 提款/还款
+   - 每个操作前检查余额和授权额度
 
-## MVP 功能范围
-实现以下 6 个基础功能：
+3. **常见问题排查**:
+   - 交易成功但无效果：检查是否使用了正确的Pool地址
+   - 余额查询为0：检查aToken地址是否正确，可能需要等待区块确认
 
-1. 查询余额 (balanceOf)
-2. 授权 (approve)
-3. 存款 (supply)
-4. 提款 (withdraw)
-5. 借款 (borrow)
-6. 还款 (repay)
-
-**注意操作依赖顺序**：必须先approve才能supply，有抵押品才能borrow，等等
-
-## 实现方式
-- **ActionProvider 模式**：基于 AgentKit 的 ActionProvider 模式扩展，创建一个 AaveActionProvider，封装上述操作为独立 action。
-- **合约交互**：使用 ethers.js 构建交易，通过调用 Aave 核心合约的相应方法实现各项操作。
-- **错误处理**：每个 action 均需加入基础错误处理逻辑，确保在异常情况时能反馈友好错误信息。
-- **保持简单**：初期 MVP 不涉及复杂状态管理或额外抽象，仅专注于基本功能实现。
-
-## 代码结构与最佳实践
-- 使用 TypeScript 开发，遵循 TS 最佳实践，确保代码类型安全和清晰可维护。
-- 结构上保持与 AgentKit 官方示例一致，模块化编写代码，便于后续扩展和社区贡献。
-- 避免使用复杂的图表数据（如 protocol-subgraphs）和外围合约功能，专注于最基础的 6 个操作。
+## MVP 功能清单
+- [x] 查询WETH余额
+- [x] 查询aToken余额
+- [x] 授权WETH
+- [x] 存款WETH
+- [ ] 提款WETH
+- [ ] 借款WETH
+- [ ] 还款WETH
 
 ## 测试策略
 - 所有功能在 **Base Sepolia 测试网**上测试
-- 使用小额测试金额确保安全（如 0.01 ETH/WETH）
-- 测试每个操作的成功路径和常见错误路径
+- 使用小额测试金额（如 0.0001 WETH）
+- 使用`test-aave.ts`脚本验证功能

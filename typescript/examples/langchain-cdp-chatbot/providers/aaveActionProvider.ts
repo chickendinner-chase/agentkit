@@ -515,7 +515,7 @@ export function aaveActionProvider(): ActionProvider {
               args: [
                 assetAddress,
                 weiAmount,
-                1, // 变动利率模式
+                2, // 变动利率模式，从1改为2
                 0, // 推荐码
                 userAddress
               ]
@@ -579,7 +579,7 @@ export function aaveActionProvider(): ActionProvider {
               args: [
                 assetAddress,
                 weiAmount,
-                1, // 变动利率模式
+                2, // 变动利率模式，从1改为2，与借款保持一致
                 userAddress
               ]
             });
@@ -596,6 +596,61 @@ export function aaveActionProvider(): ActionProvider {
             return `还款交易已发送！交易哈希: ${txHash}\n您已向Aave偿还 ${amount} WETH`;
           } catch (error) {
             return `还款操作失败: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+      
+      {
+        name: "repay_all_weth",
+        description: "向Aave偿还全部WETH借款",
+        schema: BalanceSchema, // 不需要额外参数，所以使用简单的schema
+        invoke: async (args: z.infer<typeof BalanceSchema>) => {
+          const walletProvider = (args as any).walletProvider;
+          try {
+            if (!walletProvider) {
+              return "错误：钱包提供者未初始化";
+            }
+            
+            const networkId = walletProvider.getNetworkId?.() || DEFAULT_NETWORK_ID;
+            const config = NETWORK_CONFIG[networkId as keyof typeof NETWORK_CONFIG] || NETWORK_CONFIG[DEFAULT_NETWORK_ID];
+            
+            // 准备资产地址和池地址
+            const assetAddress = config.WETH_ADDRESS.toLowerCase() as `0x${string}`;
+            const poolAddress = config.AAVE_POOL_ADDRESS.toLowerCase() as `0x${string}`;
+            const userAddress = walletProvider.getAddress();
+            
+            console.log("WETH地址:", assetAddress);
+            console.log("Pool地址:", poolAddress);
+            console.log("用户地址:", userAddress);
+            console.log("还款金额: 全部");
+            
+            // Aave约定，使用uint256.max表示全部还款
+            const MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+            
+            // 使用viem的encodeFunctionData编码repay函数调用
+            const data = encodeFunctionData({
+              abi: ABI.POOL_ABI.REPAY,
+              functionName: 'repay',
+              args: [
+                assetAddress,
+                MAX_UINT256, // 使用最大值表示全部还款
+                2, // 变动利率模式，与借款一致
+                userAddress
+              ]
+            });
+            
+            console.log("编码后的交易数据:", data);
+            
+            // 发送交易
+            const txHash = await walletProvider.sendTransaction({
+              to: poolAddress,
+              data,
+              gas: GAS_LIMITS.REPAY,
+            });
+            
+            return `全额还款交易已发送！交易哈希: ${txHash}\n您已向Aave偿还所有WETH借款`;
+          } catch (error) {
+            return `全额还款操作失败: ${error instanceof Error ? error.message : String(error)}`;
           }
         },
       },
@@ -651,6 +706,59 @@ export function aaveActionProvider(): ActionProvider {
             return `您已授权Aave使用 ${formattedAllowance} WETH`;
           } catch (error) {
             return `查询授权额度失败: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+      
+      {
+        name: "check_debt_balance",
+        description: "查询用户在Aave上的债务代币余额",
+        schema: BalanceSchema,
+        invoke: async (args: z.infer<typeof BalanceSchema>) => {
+          const walletProvider = (args as any).walletProvider;
+          try {
+            if (!walletProvider) {
+              return "错误：钱包提供者未初始化";
+            }
+            
+            const networkId = walletProvider.getNetworkId?.() || DEFAULT_NETWORK_ID;
+            const config = NETWORK_CONFIG[networkId as keyof typeof NETWORK_CONFIG] || NETWORK_CONFIG[DEFAULT_NETWORK_ID];
+            
+            // 债务代币地址 (variable debt WETH)
+            const debtTokenAddress = "0xf0f0025dc51f532ab84c33eb9d01583eaa0f74c7";
+            const userAddress = walletProvider.getAddress();
+            
+            console.log("债务代币地址:", debtTokenAddress);
+            console.log("用户地址:", userAddress);
+            
+            // 定义简单的balanceOf ABI
+            const balanceOfAbi = [
+              {
+                type: "function",
+                name: "balanceOf",
+                inputs: [{ name: "account", type: "address" }],
+                outputs: [{ type: "uint256" }],
+                stateMutability: "view"
+              }
+            ];
+            
+            // 获取债务代币余额
+            const debtBalanceWei = await walletProvider.readContract({
+              address: debtTokenAddress as `0x${string}`,
+              abi: balanceOfAbi,
+              functionName: "balanceOf",
+              args: [userAddress]
+            });
+            
+            console.log("原始债务代币余额:", debtBalanceWei.toString());
+            
+            // 将Wei转换为ETH单位
+            const debtBalance = formatUnits(debtBalanceWei, 18);
+            
+            return `您在Aave上的债务余额为: ${debtBalance} variableDebtWETH`;
+          } catch (error) {
+            console.error("查询债务代币余额错误详情:", error);
+            return `查询债务代币余额失败: ${error instanceof Error ? error.message : String(error)}`;
           }
         },
       }
