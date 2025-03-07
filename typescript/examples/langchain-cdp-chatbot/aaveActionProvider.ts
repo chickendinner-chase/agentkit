@@ -4,7 +4,7 @@ import { z } from "zod";
 
 // Aave V3 合约地址 (Base Sepolia)
 const AAVE_POOL_ADDRESS = "0x6aCC8F7AF8EC783e129cc4412e3984414b953B01";
-// aWETH代币地址 (Base Sepolia) - 需要替换为实际地址
+// aWETH代币地址 (Base Sepolia)
 const AWETH_TOKEN_ADDRESS = "0x96e32dE4B1d1617B8c2AE13a88B9cC287239b13f";
 // Base Sepolia WETH地址
 const WETH_ADDRESS = "0x4200000000000000000000000000000000000023";
